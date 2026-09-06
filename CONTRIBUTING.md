@@ -148,6 +148,13 @@ purpose: this file is screened by `scripts/check_evidence_claims.py`, and an
 illustrative figure reads as a published claim. That screen caught this very
 paragraph.)
 
+**Markdown links are discovered from the tracked tree.** Both local and remote
+CI call `scripts/markdown-link-files.sh`: every tracked Markdown file gets the
+deterministic source-relative check, while external URLs stay bounded to
+`scripts/markdown-link-external-files.txt`. Add a documented entry to
+`scripts/markdown-link-exclusions.txt` only when a source file must be skipped;
+the discovery test rejects exclusions that no longer name a tracked file.
+
 **A change that touches no Rust skips the Rust gate.** The workspace suite exists
 to stop a Rust regression reaching `main`, and a diff with no `.rs` file in it
 cannot cause one:
