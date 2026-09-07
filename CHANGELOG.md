@@ -12,6 +12,13 @@ Releases before `0.2.5` predate the public launch; their notes live in the
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep supplementary groups out of caller authorization when `SO_PEERPIDFD`
+  cannot pin the peer, including an already-reaped peer or fd exhaustion.
+  Only `ENOPROTOOPT` retains the older-kernel best-effort path; every other
+  failure keeps only the primary GID captured by `SO_PEERCRED` (#250).
+
 ## [0.13.1] — 2026-09-05
 
 The last digit moves. No shipped code changed: `crates/**`, `apps/*/src/**` and
