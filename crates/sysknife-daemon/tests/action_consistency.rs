@@ -323,16 +323,20 @@ const FEDORA_PATHS: &[&str] = &["/etc/yum.repos.d"];
 
 /// Tokens that mean Debian-family only.
 const DEBIAN_TOOLS: &[&str] = &[
+    "apt",
     "apt-get",
     "apt-mark",
     "apt-cache",
     "dpkg",
     "apt-pin-edit",
+    // Shipped helpers encapsulate /etc/apt writes and update-grub respectively.
+    "unattended-upgrades-edit",
+    "grub-kargs-edit",
     "update-grub",
     "unattended-upgrade",
 ];
 
-const DEBIAN_PATHS: &[&str] = &["/etc/apt/", "/etc/default/grub"];
+const DEBIAN_PATHS: &[&str] = &["/etc/apt/", "/var/log/apt/", "/etc/default/grub"];
 
 const UBUNTU_TOOLS: &[&str] = &[
     "pro",
