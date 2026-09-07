@@ -27,6 +27,11 @@ Releases before `0.2.5` predate the public launch; their notes live in the
 
 ### Fixed
 
+- Keep supplementary groups out of caller authorization when `SO_PEERPIDFD`
+  cannot pin the peer, including an already-reaped peer or fd exhaustion.
+  Only `ENOPROTOOPT` retains the older-kernel best-effort path; every other
+  failure keeps only the primary GID captured by `SO_PEERCRED` (#250).
+
 - **A release pin that lost its `version` field passed the version check**
   ([#378](https://github.com/lacs-project/sysknife/pull/378), closes [#368](https://github.com/lacs-project/sysknife/issues/368)).
   `check_release_versions.sh` piped its list of internal path dependencies
@@ -41,7 +46,6 @@ Releases before `0.2.5` predate the public launch; their notes live in the
 
 - **The daemon's `sysknife-apt-pin-edit` lock arm was unreachable**
   ([#375](https://github.com/lacs-project/sysknife/pull/375), closes [#248](https://github.com/lacs-project/sysknife/issues/248)).
-
 
 ## [0.13.1] — 2026-09-05
 
