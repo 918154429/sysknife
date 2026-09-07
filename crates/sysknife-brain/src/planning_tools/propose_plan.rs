@@ -1083,7 +1083,11 @@ mod tests {
     fn fedora_tool_def_omits_debian_only_actions() {
         let def = tool_def_for_family(Some(DISTRO_FAMILY_FEDORA));
         let offered = offered_actions(&def);
-        for name in DEBIAN_ONLY_ACTIONS {
+        for name in DEBIAN_ONLY_ACTIONS
+            .iter()
+            .chain(UBUNTU_ONLY_ACTIONS)
+            .chain(NON_CANONICAL_ON_FEDORA)
+        {
             assert!(
                 !offered.contains(&name.to_string()),
                 "Fedora tool def offered Debian-only action {name}"

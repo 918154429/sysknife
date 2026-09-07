@@ -378,8 +378,20 @@ const UNFENCED_BY_DECISION: &[&str] = &[];
 #[test]
 fn family_fence_agrees_with_each_action_s_mechanism() {
     let mut wrong = Vec::new();
+    let specs = all_specs();
+    for name in FEDORA_ONLY_ACTIONS
+        .iter()
+        .chain(DEBIAN_ONLY_ACTIONS)
+        .chain(UBUNTU_ONLY_ACTIONS)
+    {
+        if !specs.iter().any(|spec| spec.action_name == *name) {
+            wrong.push(format!(
+                "{name}: hard fence names an action absent from the catalogue"
+            ));
+        }
+    }
 
-    for spec in all_specs() {
+    for spec in specs {
         let name = spec.action_name;
         let text = mechanism_text(&spec);
 
