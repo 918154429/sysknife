@@ -1,0 +1,32 @@
+# Action compatibility
+
+Host eligibility, mechanism compatibility, and planner preference answer different
+questions. The constants in `sysknife-core::action_family` separate them:
+
+- `DEBIAN_ONLY_ACTIONS` covers apt/dpkg and the Debian GRUB interface.
+- `UBUNTU_ONLY_ACTIONS` covers Canonical services, release upgrades, Ubuntu PPAs,
+  and the Ubuntu reboot sentinel. A Debian family or `ID_LIKE=ubuntu` hint does
+  not establish Ubuntu identity.
+- `FEDORA_ONLY_ACTIONS` covers rpm-ostree/DNF mechanisms.
+- `NON_CANONICAL_ON_DEBIAN` withholds firewalld/toolbox from the entire Debian
+  family's planner. `NON_CANONICAL_ON_DEBIAN_HOST` additionally withholds
+  snap/netplan/Multipass on non-Ubuntu Debian-family hosts.
+- `NON_CANONICAL_ON_FEDORA` keeps the Fedora planner on its existing defaults.
+  Portable mechanisms such as ufw, AppArmor, fail2ban, Flatpak and distrobox can
+  still execute when the operator has installed and configured their tools.
+
+Only the hard lists feed the daemon and CLI compatibility fences. The MCP
+surface uses the same routing checks and withholds hard-restricted actions when
+detection fails. The planner receives an explicit distribution ID alongside the
+family; display text never grants Ubuntu capabilities.
+
+The action reference's Distro column describes the default supported catalogue,
+including preferences. It is not a claim that a portable tool cannot be installed
+elsewhere. The default Ubuntu and Fedora catalogues remain unchanged by this split.
+
+Debian is still ineligible under `DistroId::is_supported()`. This change does not
+enable its mutations or claim live Debian validation. PPAs contain packages built
+for an Ubuntu series, even on Debian releases that provide add-apt-repository.
+`CheckPendingReboot` reads `/var/run/reboot-required`, normally produced by
+Ubuntu's update-notifier. A missing file is not sufficient evidence on Debian;
+the action stays Ubuntu-only pending validation of a Debian producer or backend.

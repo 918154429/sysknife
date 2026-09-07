@@ -3,7 +3,7 @@
 **This file is generated. Do not edit by hand.**
 Regenerate with `UPDATE_ACTION_REFERENCE=1 cargo test -p sysknife-daemon --test action_reference_doc`; a plain `cargo test` fails if it drifts from the catalogue.
 
-Every row is derived from the live code: the command from each action's `ActionSpec` mechanism, the risk from its `risk_level`, the distro from `sysknife-core::action_family`, and the description from the brain's `KNOWN_ACTIONS` list. **Distro** is `All` (cross-distro), `Ubuntu` (Debian-family only), or `Fedora` (atomic-host only). **Rb** = requires reboot; **Ro** = automatic rollback available.
+Every row is derived from the live code: the command from each action's `ActionSpec` mechanism, the risk from its `risk_level`, the distro from `sysknife-core::action_family`, and the description from the brain's `KNOWN_ACTIONS` list. **Distro** identifies the default supported catalogue: `All`, `Ubuntu`, or `Fedora`. It includes planner preferences, not just hard execution fences; see [action compatibility](action-compatibility.md). **Rb** = requires reboot; **Ro** = automatic rollback available.
 
 ## Deployment (atomic host)
 
@@ -256,7 +256,7 @@ Every row is derived from the live code: the command from each action's `ActionS
 
 | Action | Command | Risk | Distro | Rb | Ro | Description |
 |---|---|---|---|---|---|---|
-| `CheckPendingReboot` | `bash -c "if test -f /var/run/reboot-required; then cat /var/run/reboot-required; cat /var/run/reboot-required.pkgs 2>/dev/null; true; else echo 'No reboot required.'; fi"` | Low | Ubuntu | – | – | check whether a reboot is pending (/var/run/reboot-required) — no params; Ubuntu/Debian only; read-only |
+| `CheckPendingReboot` | `bash -c "if test -f /var/run/reboot-required; then cat /var/run/reboot-required; cat /var/run/reboot-required.pkgs 2>/dev/null; true; else echo 'No reboot required.'; fi"` | Low | Ubuntu | – | – | check whether a reboot is pending (/var/run/reboot-required) — no params; Ubuntu only; read-only |
 
 ## AppArmor
 

@@ -3,8 +3,9 @@
 //! Some actions in the SysKnife catalogue are distro-specific — they are only
 //! meaningful on a particular package-manager family:
 //!
-//! - `Apt*`, `Snap*`, `Ufw*`, `Distrobox*`, `Netplan*` require a Debian-family
-//!   distro (Ubuntu or Debian).
+//! - apt/dpkg and Debian's GRUB interface require a Debian-family distro.
+//! - Ubuntu services, PPAs and the reboot sentinel require Ubuntu itself.
+//! - Installable tools such as snap, ufw and netplan are planner preferences.
 //! - rpm-ostree shaped actions (`RebaseSystem`, `AddLayeredPackage`, …) require
 //!   a Fedora-family distro.
 //!
@@ -22,7 +23,10 @@ use sysknife_core::distro::{DistroFamily, DistroId};
 // The canonical family lists are the single source of truth in
 // `sysknife-core::action_family`; the daemon fence, this routing guard, and the
 // brain prompt all reference the same constants so they cannot drift apart.
-use sysknife_core::action_family::{DEBIAN_ONLY_ACTIONS, FEDORA_ONLY_ACTIONS};
+use sysknife_core::action_family::{
+    action_matches_distro, action_requires_distro, DEBIAN_ONLY_ACTIONS, FEDORA_ONLY_ACTIONS,
+    UBUNTU_ONLY_ACTIONS,
+};
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -45,9 +49,14 @@ pub fn check_action_distro(action_name: &str, distro: Option<&DistroId>) -> Resu
     };
 
     let family = distro.family();
+    if UBUNTU_ONLY_ACTIONS.contains(&action_name) && !action_matches_distro(action_name, distro) {
+        return Err(format!(
+            "{action_name} requires Ubuntu itself; current distro is {distro}"
+        ));
+    }
     if DEBIAN_ONLY_ACTIONS.contains(&action_name) && family != DistroFamily::Debian {
         return Err(format!(
-            "{action_name} is only valid on Debian-family distros (apt/snap/ufw); \
+            "{action_name} is only valid on Debian-family distros (apt/dpkg/GRUB); \
              current distro is {distro} ({family_name})",
             family_name = family_label(&family),
         ));
@@ -66,9 +75,7 @@ pub fn check_action_distro(action_name: &str, distro: Option<&DistroId>) -> Resu
     // this mutate" — `AptUpdate` is Low/Observer and runs `sudo apt-get update`.
     // A client that refuses what the daemon would run is confusing; a client that
     // *permits* what the daemon refuses is worse, so both stay strict together.
-    if (DEBIAN_ONLY_ACTIONS.contains(&action_name) || FEDORA_ONLY_ACTIONS.contains(&action_name))
-        && !distro.is_supported()
-    {
+    if action_requires_distro(action_name) && !distro.is_supported() {
         return Err(format!(
             "{action_name} is disabled on unsupported distro {distro}; \
              see docs/distro-support.md"
@@ -116,34 +123,31 @@ mod tests {
     }
 
     #[test]
-    fn snap_install_on_fedora_silverblue_returns_error() {
+    fn snap_install_on_fedora_silverblue_is_not_hard_fenced() {
         let distro = DistroId::FedoraSilverblue { version: 41 };
         let result = check_action_distro("SnapInstall", Some(&distro));
-        assert!(result.is_err());
-        let msg = result.unwrap_err();
-        assert!(msg.contains("Debian-family"), "got: {msg}");
-        assert!(msg.contains("FedoraSilverblue 41"), "got: {msg}");
+        assert!(result.is_ok());
     }
 
     #[test]
-    fn ufw_allow_on_fedora_returns_error() {
-        let distro = DistroId::Fedora { version: 41 };
+    fn ufw_allow_on_fedora_is_not_hard_fenced() {
+        let distro = DistroId::FedoraSilverblue { version: 41 };
         let result = check_action_distro("UfwAllow", Some(&distro));
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[test]
-    fn netplan_apply_on_fedora_returns_error() {
-        let distro = DistroId::Fedora { version: 41 };
+    fn netplan_apply_on_fedora_is_not_hard_fenced() {
+        let distro = DistroId::FedoraSilverblue { version: 41 };
         let result = check_action_distro("NetplanApply", Some(&distro));
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[test]
-    fn distrobox_create_on_fedora_returns_error() {
-        let distro = DistroId::Fedora { version: 41 };
+    fn distrobox_create_on_fedora_is_not_hard_fenced() {
+        let distro = DistroId::FedoraSilverblue { version: 41 };
         let result = check_action_distro("DistroboxCreate", Some(&distro));
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     // -----------------------------------------------------------------------
@@ -277,8 +281,8 @@ mod tests {
 
         let fedora = DistroId::FedoraSilverblue { version: 41 };
         assert!(
-            check_action_distro("GetHostState", Some(&fedora)).is_err(),
-            "the fence runs both ways: Fedora has GetSystemState"
+            check_action_distro("GetHostState", Some(&fedora)).is_ok(),
+            "hostnamectl is portable even when Fedora prefers deployment state"
         );
     }
 
@@ -310,6 +314,37 @@ mod tests {
                 result.is_err(),
                 "{action} should be rejected on Fedora but was allowed"
             );
+        }
+    }
+
+    #[test]
+    fn ubuntu_only_actions_require_identity_and_eligibility() {
+        let ubuntu = DistroId::Ubuntu {
+            major: 24,
+            minor: 4,
+        };
+        for action in UBUNTU_ONLY_ACTIONS {
+            assert!(
+                check_action_distro(action, Some(&ubuntu)).is_ok(),
+                "{action}"
+            );
+            for distro in [
+                DistroId::Debian { version: Some(13) },
+                DistroId::FedoraSilverblue { version: 41 },
+                DistroId::UbuntuCore {
+                    major: 24,
+                    minor: 4,
+                },
+                DistroId::Ubuntu {
+                    major: 18,
+                    minor: 4,
+                },
+            ] {
+                assert!(
+                    check_action_distro(action, Some(&distro)).is_err(),
+                    "{action} on {distro}"
+                );
+            }
         }
     }
 

@@ -896,18 +896,9 @@ async fn authorize_for_transaction(
 // Family-specific action lists come from the single source of truth in
 // `sysknife-core::action_family`, shared with the CLI routing guard and the
 // brain prompt so the execution fence can never drift out of parity.
-use sysknife_core::action_family::{DEBIAN_ONLY_ACTIONS, FEDORA_ONLY_ACTIONS};
+use sysknife_core::action_family::{action_matches_distro, action_requires_distro};
 
 fn validate_action_platform(state: &DaemonState, action_name: &str) -> Result<(), String> {
-    use sysknife_core::distro::DistroFamily;
-
-    let required_family = if DEBIAN_ONLY_ACTIONS.contains(&action_name) {
-        Some(DistroFamily::Debian)
-    } else if FEDORA_ONLY_ACTIONS.contains(&action_name) {
-        Some(DistroFamily::Fedora)
-    } else {
-        None
-    };
     // Deliberately the compile-time baseline, not `state.policy`. Whether an
     // action mutates the system is a property of the action; whether a given
     // caller may run it is what `[policy.risk_overrides]` decides. Reading it
@@ -917,7 +908,7 @@ fn validate_action_platform(state: &DaemonState, action_name: &str) -> Result<()
     // access-control change.
     let is_mutating = crate::policy::min_role_for_action(action_name)
         .is_some_and(|role| role > CallerRole::Observer);
-    if required_family.is_none() && !is_mutating {
+    if !action_requires_distro(action_name) && !is_mutating {
         return Ok(());
     }
 
@@ -946,7 +937,7 @@ fn validate_action_platform(state: &DaemonState, action_name: &str) -> Result<()
             "cannot run {action_name} on unsupported host {distro}; see docs/distro-support.md"
         ));
     }
-    if required_family.is_some_and(|family| distro.family() != family) {
+    if !action_matches_distro(action_name, distro) {
         return Err(format!(
             "action {action_name} is incompatible with supported host {distro}"
         ));
@@ -5047,6 +5038,30 @@ mod tests {
         });
         assert!(validate_action_platform(&state, "AptInstall").is_ok());
         assert!(validate_action_platform(&state, "AddLayeredPackage").is_err());
+
+        for action in sysknife_core::action_family::UBUNTU_ONLY_ACTIONS {
+            assert!(validate_action_platform(&state, action).is_ok(), "{action}");
+        }
+        state.host_distro = Some(sysknife_core::distro::DistroId::FedoraSilverblue { version: 41 });
+        for action in sysknife_core::action_family::UBUNTU_ONLY_ACTIONS {
+            assert!(
+                validate_action_platform(&state, action).is_err(),
+                "{action}"
+            );
+        }
+        for action in sysknife_core::action_family::NON_CANONICAL_ON_FEDORA {
+            assert!(
+                validate_action_platform(&state, action).is_ok(),
+                "portable {action}"
+            );
+        }
+        state.host_distro = None;
+        for action in sysknife_core::action_family::UBUNTU_ONLY_ACTIONS {
+            assert!(
+                validate_action_platform(&state, action).is_err(),
+                "undetected {action}"
+            );
+        }
     }
 
     // ------------------------------------------------------------------

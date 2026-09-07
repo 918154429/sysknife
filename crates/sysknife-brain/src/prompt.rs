@@ -1066,6 +1066,28 @@ fn render_fedora_prompt(prefs: Option<&str>, hint: &sysknife_types::DistroHint) 
 }
 
 fn render_debian_prompt(prefs: Option<&str>, hint: &sysknife_types::DistroHint) -> String {
+    if hint.id != "ubuntu" {
+        // Debian-family membership must not import Ubuntu's Pro/PPA/snap
+        // examples. The schema supplies the exact family/identity-filtered
+        // catalogue; eligibility is still enforced by the CLI and daemon.
+        let mut s = String::new();
+        s.push_str(PREAMBLE);
+        s.push_str(SPOTLIGHTING_CLAUSE);
+        push_shared(&mut s, EXAMPLES, &DEBIAN_STATE_ACTION);
+        push_shared(&mut s, CROSS_DISTRO_RISK_TABLES, &DEBIAN_STATE_ACTION);
+        s.push_str(CROSS_DISTRO_RISK_RULES);
+        s.push_str(
+            "\n## Detected distro\nDebian-family host; Ubuntu identity has not been established. \
+            Use the offered action catalogue, with AptInstall/AptRemove/AptSearch for packages. \
+            Family compatibility does not establish host eligibility.\n",
+        );
+        push_shared(&mut s, CROSS_DISTRO_DISAMBIGUATION, &DEBIAN_STATE_ACTION);
+        push_shared(&mut s, CROSS_DISTRO_PARAMS, &DEBIAN_STATE_ACTION);
+        s.push_str(CONSTRAINTS);
+        push_shared(&mut s, PREFERENCE_TOOLS, &DEBIAN_STATE_ACTION);
+        append_prefs(&mut s, prefs);
+        return s;
+    }
     let version = hint.version.as_deref().unwrap_or("(version unknown)");
     // Sized to the rendered prompt (measured ~41 KB) — see the Fedora renderer
     // above for why.
@@ -1156,6 +1178,7 @@ mod tests {
 
     fn fedora_hint() -> DistroHint {
         DistroHint {
+            id: "fedora".into(),
             family: DISTRO_FAMILY_FEDORA,
             version: Some("Fedora 41 (Silverblue)".to_string()),
         }
@@ -1163,6 +1186,7 @@ mod tests {
 
     fn debian_hint() -> DistroHint {
         DistroHint {
+            id: "ubuntu".into(),
             family: DISTRO_FAMILY_DEBIAN,
             version: Some("Ubuntu 24.04".to_string()),
         }
@@ -1548,6 +1572,14 @@ mod tests {
                 sysknife_core::action_family::DEBIAN_ONLY_ACTIONS,
             ),
             (
+                "Ubuntu-only",
+                sysknife_core::action_family::UBUNTU_ONLY_ACTIONS,
+            ),
+            (
+                "non-canonical-on-Debian-host",
+                sysknife_core::action_family::NON_CANONICAL_ON_DEBIAN_HOST,
+            ),
+            (
                 "non-canonical-on-Debian",
                 sysknife_core::action_family::NON_CANONICAL_ON_DEBIAN,
             ),
@@ -1561,5 +1593,23 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn debian_prompt_does_not_inherit_ubuntu_examples() {
+        let mut hint = debian_hint();
+        hint.id = "debian".into();
+        let prompt = build_system_prompt(None, Some(&hint));
+        for action in sysknife_core::action_family::UBUNTU_ONLY_ACTIONS
+            .iter()
+            .chain(sysknife_core::action_family::NON_CANONICAL_ON_DEBIAN_HOST)
+        {
+            assert!(
+                !prompt.contains(action),
+                "Debian prompt advertises {action}"
+            );
+        }
+        assert!(prompt.contains("AptInstall"));
+        assert!(prompt.contains("GetHostState"));
     }
 }

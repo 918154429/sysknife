@@ -684,9 +684,7 @@ impl LlmPlanner {
         t.extend(query_tools());
         t.push(crate::planning_tools::preferences::remember_tool_def());
         t.push(crate::planning_tools::preferences::forget_tool_def());
-        t.push(propose_plan_tool_def(
-            self.distro_hint.as_ref().map(|h| h.family),
-        ));
+        t.push(propose_plan_tool_def(self.distro_hint.as_ref()));
         t.push(crate::planning_tools::refuse::refuse_tool_def());
         t
     }
