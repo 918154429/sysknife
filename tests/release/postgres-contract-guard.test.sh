@@ -144,15 +144,14 @@ check_invocation() {
 
     local file="${marker_path[$target]:-}"
     if [ -z "$file" ]; then
-        # A --test target with no marker file is either a target that has no
-        # live contract, or one whose file has gone. Distinguish them: cargo
-        # errors on a missing target, but a green guard that names a target
-        # nothing can build is a guard reporting on nothing.
+        # Every target invoked by the live job must retain its fail-closed
+        # marker. Checking only marker -> invocation lets a renamed marker
+        # silently shrink the contract set while CI still runs that target.
         if ! compgen -G "$repo_root/*/*/tests/$target.rs" >/dev/null; then
             report "$where targets --test $target, and no crates/*/tests/$target.rs or apps/*/tests/$target.rs exists to run"
+        else
+            report "$where targets --test $target, whose file no longer names $require_token; the contract set narrowed under the job"
         fi
-        # Otherwise the ignore-flag check above still applies; there is no
-        # source of truth here to resolve a name against.
         return
     fi
 
@@ -305,6 +304,8 @@ done < <(extract_invocations "$ci_local")
 # Both entry paths, for every contract. ci-local.sh reaches the database two
 # ways (URL already exported, container started here) and a contributor who
 # takes either one has to run the same set CI does.
+# The lower bound reflects those two current paths; adding another entry path
+# also requires revisiting this coverage check.
 for stem in "${marker_stems[@]}"; do
     count="${local_target_count[$stem]:-0}"
     if [ "$count" -lt 2 ]; then
