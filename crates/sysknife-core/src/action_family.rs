@@ -320,13 +320,21 @@ mod tests {
             version_id: None,
             id_like: vec!["ubuntu".into(), "debian".into()],
         };
-        for action in UBUNTU_ONLY_ACTIONS {
+        // #237: name the expected boundaries independently of the production
+        // lists, so moving a PPA back to the Debian fence fails this test.
+        for action in [
+            "AddPpa",
+            "RemovePpa",
+            "ProAttach",
+            "LivepatchStatus",
+            "CheckPendingReboot",
+        ] {
             assert!(action_matches_distro(action, &ubuntu), "{action}");
             assert!(!action_matches_distro(action, &debian), "{action}");
             assert!(!action_matches_distro(action, &derivative), "{action}");
             assert!(action_requires_distro(action), "{action}");
         }
-        for action in DEBIAN_ONLY_ACTIONS {
+        for action in ["AptInstall", "AptUpdate"] {
             assert!(action_matches_distro(action, &ubuntu), "{action}");
             assert!(action_matches_distro(action, &debian), "{action}");
         }
