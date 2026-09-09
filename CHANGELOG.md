@@ -27,6 +27,24 @@ Releases before `0.2.5` predate the public launch; their notes live in the
   accepts the full hint rather than a family string. This is a public Rust API
   change requiring a middle-digit release while the project is in `0.y`.
 
+### Fixed
+
+- Attach the default safety audit log in `LlmPlanner::from_config`, the
+  construction path the CLI, the MCP server and the shell all take. Fence
+  rejections were built and tested and never written anywhere, so a rejected
+  plan left no record on any real machine. Direct `LlmPlanner::new` stays
+  without runtime defaults for embedded callers and tests (#236).
+- `sysknife-setup` prefers keyless Ollama over a cloud provider with no
+  credentials, so a first run on a machine with no API key reaches a working
+  provider instead of one it cannot authenticate to (#337).
+- The release helper refuses a missing registry version argument rather than
+  carrying an empty string into the publish path (#396).
+- Guard each live PostgreSQL test invocation independently, including the CLI
+  anchor exit-code contract, and run that CLI contract in both local CI paths.
+  Missing ignore flags, unresolved test filters, missing contract targets and
+  disabled required-database settings now fail the guard. Quoted step labels
+  cannot substitute for the arguments that actually execute (#362).
+
 ## [0.14.0] — 2026-09-07
 
 The middle digit moves because an exit code changed. `sysknife audit checkpoint`
