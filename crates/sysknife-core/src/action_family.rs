@@ -93,8 +93,8 @@ pub const FEDORA_ONLY_ACTIONS: &[&str] = &[
 /// `UfwStatus` answered `Status: inactive` — a confident wrong answer instead of
 /// a refusal.
 ///
-/// Consumed only by `sysknife-brain`'s catalogue filter. The fence must not read
-/// it: preference is not impossibility.
+/// Used by catalogue filtering and the conservative supported-host routing
+/// guard, never as a mechanism incompatibility on an eligible host.
 pub const NON_CANONICAL_ON_DEBIAN: &[&str] = &[
     // Ubuntu's canonical firewall is ufw (UfwStatus, UfwAllow/UfwDeny).
     "GetFirewallState",
@@ -154,7 +154,7 @@ pub const UBUNTU_ONLY_ACTIONS: &[&str] = &[
 
 /// Installable on Debian itself, but not its default administrative tools.
 /// Unlike [`NON_CANONICAL_ON_DEBIAN`], this applies only to non-Ubuntu members
-/// of the Debian family. It must never be consumed by an execution fence.
+/// of the Debian family. It does not impose a mechanism execution fence.
 pub const NON_CANONICAL_ON_DEBIAN_HOST: &[&str] = &[
     "SnapInstall",
     "SnapRemove",
@@ -226,6 +226,25 @@ pub fn action_requires_distro(action: &str) -> bool {
     ]
     .iter()
     .any(|list| list.contains(&action))
+}
+
+/// Whether planning and client routing require a supported host for this action.
+///
+/// Includes portable tools with distro-specific defaults, not just hard
+/// mechanism fences. Splitting those tools out of a hard fence must not let
+/// an ineligible host reach approval for a mutation the daemon will refuse.
+/// On eligible hosts, only [`action_matches_distro`] restricts mechanisms.
+/// This conservative client/catalogue gate also withholds portable reads;
+/// the daemon's read-only detection exemption remains separate.
+pub fn action_requires_supported_host(action: &str) -> bool {
+    action_requires_distro(action)
+        || [
+            NON_CANONICAL_ON_DEBIAN,
+            NON_CANONICAL_ON_DEBIAN_HOST,
+            NON_CANONICAL_ON_FEDORA,
+        ]
+        .iter()
+        .any(|list| list.contains(&action))
 }
 
 /// Mechanism compatibility only; callers must separately check host eligibility.

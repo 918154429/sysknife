@@ -963,7 +963,10 @@ fn validate_action_platform(state: &DaemonState, action_name: &str) -> Result<()
         return Ok(());
     }
 
-    // Both gates below apply to family-tagged actions whether or not they read.
+    // Both gates below apply to hard-fenced actions whether or not they read,
+    // and to all baseline non-Observer actions. Portable Observer reads are
+    // exempt above, even without distro detection; planner preferences do not
+    // turn into daemon mechanism fences.
     //
     // An earlier revision exempted read-only ones, on the reasoning that
     // docs/distro-support.md promises to refuse only *mutating* actions on an

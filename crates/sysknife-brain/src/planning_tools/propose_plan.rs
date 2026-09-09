@@ -8,8 +8,9 @@ use crate::action_name::ActionName;
 use crate::planner::{Plan, PlanRiskLevel, PlanStep, PlanningError};
 use crate::provider::ToolDefinition;
 use sysknife_core::action_family::{
-    DEBIAN_ONLY_ACTIONS, FEDORA_ONLY_ACTIONS, NON_CANONICAL_ON_DEBIAN,
-    NON_CANONICAL_ON_DEBIAN_HOST, NON_CANONICAL_ON_FEDORA, UBUNTU_ONLY_ACTIONS,
+    action_requires_supported_host, DEBIAN_ONLY_ACTIONS, FEDORA_ONLY_ACTIONS,
+    NON_CANONICAL_ON_DEBIAN, NON_CANONICAL_ON_DEBIAN_HOST, NON_CANONICAL_ON_FEDORA,
+    UBUNTU_ONLY_ACTIONS,
 };
 use sysknife_types::{DISTRO_FAMILY_DEBIAN, DISTRO_FAMILY_FEDORA, DISTRO_FAMILY_OTHER};
 
@@ -469,9 +470,9 @@ reports live interface state"),
 ///   canonical tool and the planner should reach for that instead.
 ///
 /// A detected `other` family (Arch, openSUSE, anything unrecognised) is filtered
-/// against **both** fences, matching the CLI routing guard: it refuses every
-/// family-specific action on such a host, so offering them invites a plan that is
-/// certain to be rejected after a paid call.
+/// against hard fences and portable-tool preferences, matching the CLI routing
+/// guard: it refuses every distro-policy action on such a host, so offering them
+/// invites a plan that is certain to be rejected after a paid call.
 ///
 /// No hint at all still offers everything — without a detected family there is no
 /// basis to exclude anything, and a generic deployment has to be able to plan.
@@ -497,11 +498,7 @@ fn available_on(action: &str, hint: Option<&sysknife_types::DistroHint>) -> bool
                 && !UBUNTU_ONLY_ACTIONS.contains(&action)
                 && !NON_CANONICAL_ON_FEDORA.contains(&action)
         }
-        Some(DISTRO_FAMILY_OTHER) => {
-            !FEDORA_ONLY_ACTIONS.contains(&action)
-                && !DEBIAN_ONLY_ACTIONS.contains(&action)
-                && !UBUNTU_ONLY_ACTIONS.contains(&action)
-        }
+        Some(DISTRO_FAMILY_OTHER) => !action_requires_supported_host(action),
         _ => true,
     }
 }
@@ -1134,8 +1131,37 @@ mod tests {
         // The CLI routing guard refuses every family-specific action on a host
         // that is neither Debian nor Fedora, so offering them here would spend a
         // paid call on a plan certain to be rejected.
-        let offered = offered_actions(&tool_def_for_family(Some(DISTRO_FAMILY_OTHER)));
-        for name in FEDORA_ONLY_ACTIONS.iter().chain(DEBIAN_ONLY_ACTIONS.iter()) {
+        let def = tool_def_for_family(Some(DISTRO_FAMILY_OTHER));
+        let offered = offered_actions(&def);
+        // Literal portable cases keep this regression visible even if a list
+        // is narrowed again. Check the description as well as the enum.
+        let catalogue = def.input_schema["properties"]["steps"]["items"]["properties"]
+            ["action_name"]["description"]
+            .as_str()
+            .unwrap();
+        for name in [
+            "SnapInstall",
+            "UfwEnable",
+            "AppArmorEnforce",
+            "ConfigureFirewall",
+            "CreateToolbox",
+        ] {
+            assert!(!offered.contains(&name.to_string()), "offered {name}");
+            assert!(
+                !catalogue
+                    .lines()
+                    .any(|line| line.starts_with(&format!("{name} — "))),
+                "catalogue describes unavailable {name}"
+            );
+        }
+        for name in FEDORA_ONLY_ACTIONS
+            .iter()
+            .chain(DEBIAN_ONLY_ACTIONS)
+            .chain(UBUNTU_ONLY_ACTIONS)
+            .chain(NON_CANONICAL_ON_DEBIAN)
+            .chain(NON_CANONICAL_ON_DEBIAN_HOST)
+            .chain(NON_CANONICAL_ON_FEDORA)
+        {
             assert!(
                 !offered.contains(&name.to_string()),
                 "an unrecognised-family host was offered family-specific action {name}"

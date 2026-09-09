@@ -15,8 +15,19 @@ questions. The constants in `sysknife-core::action_family` separate them:
   Portable mechanisms such as ufw, AppArmor, fail2ban, Flatpak and distrobox can
   still execute when the operator has installed and configured their tools.
 
-Only the hard lists feed the daemon and CLI compatibility fences. The MCP
-surface uses the same routing checks and withholds hard-restricted actions when
+Only the hard lists feed the daemon and CLI mechanism compatibility fences.
+The shared `action_requires_supported_host` predicate also includes portable
+tools for CLI host eligibility and unknown-family catalogue filtering. Those
+hosts must not reach approval for mutations the daemon will refuse. This
+conservative client gate withholds portable reads too; it does not restrict
+portable tools on eligible Ubuntu or Fedora Atomic hosts.
+
+At the daemon, portable Observer reads such as `UfwStatus` and `SnapList` no
+longer require distro detection after leaving the hard lists. This widens
+read-only inspection; mutations still require an eligible host, and the
+Low-risk mutating `AptUpdate` remains hard-fenced.
+
+The MCP surface uses the same routing checks and withholds hard-restricted actions when
 detection fails. The planner receives an explicit distribution ID alongside the
 family; display text never grants Ubuntu capabilities.
 

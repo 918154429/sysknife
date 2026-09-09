@@ -24,8 +24,8 @@ use sysknife_core::distro::{DistroFamily, DistroId};
 // `sysknife-core::action_family`; the daemon fence, this routing guard, and the
 // brain prompt all reference the same constants so they cannot drift apart.
 use sysknife_core::action_family::{
-    action_matches_distro, action_requires_distro, DEBIAN_ONLY_ACTIONS, FEDORA_ONLY_ACTIONS,
-    UBUNTU_ONLY_ACTIONS,
+    action_matches_distro, action_requires_supported_host, DEBIAN_ONLY_ACTIONS,
+    FEDORA_ONLY_ACTIONS, UBUNTU_ONLY_ACTIONS,
 };
 
 // ---------------------------------------------------------------------------
@@ -70,12 +70,10 @@ pub fn check_action_distro(action_name: &str, distro: Option<&DistroId>) -> Resu
         ));
     }
 
-    // Kept in step with the daemon's own fence in `validate_action_platform`,
-    // which does not exempt reads either: the RBAC role is a bad proxy for "does
-    // this mutate" — `AptUpdate` is Low/Observer and runs `sudo apt-get update`.
-    // A client that refuses what the daemon would run is confusing; a client that
-    // *permits* what the daemon refuses is worse, so both stay strict together.
-    if action_requires_distro(action_name) && !distro.is_supported() {
+    // Host eligibility is wider than mechanism compatibility: portable tools
+    // still cannot mutate an unsupported host. Conservatively withhold the
+    // entire distro-policy set here, including its reads, before approval.
+    if action_requires_supported_host(action_name) && !distro.is_supported() {
         return Err(format!(
             "{action_name} is disabled on unsupported distro {distro}; \
              see docs/distro-support.md"
@@ -197,12 +195,54 @@ mod tests {
     }
 
     #[test]
-    fn snap_install_on_ubuntu_is_ok() {
-        let distro = DistroId::Ubuntu {
-            major: 24,
-            minor: 4,
-        };
-        assert!(check_action_distro("SnapInstall", Some(&distro)).is_ok());
+    fn portable_tools_require_supported_hosts_before_approval() {
+        // Literal cases pin both portable families independently of the lists
+        // being split. A supported host may use its non-default tools.
+        for action in [
+            "SnapInstall",
+            "UfwEnable",
+            "UfwAllow",
+            "UfwLimit",
+            "AppArmorEnforce",
+            "Fail2banBanIp",
+            "ConfigureFail2banJail",
+            "ConfigureFirewall",
+            "CreateToolbox",
+            "AptUpdate",
+        ] {
+            for distro in [
+                DistroId::Debian { version: Some(13) },
+                DistroId::Ubuntu {
+                    major: 18,
+                    minor: 4,
+                },
+                DistroId::Fedora { version: 41 },
+                DistroId::Other {
+                    id: "arch".into(),
+                    version_id: None,
+                    id_like: vec![],
+                },
+            ] {
+                assert!(
+                    check_action_distro(action, Some(&distro)).is_err(),
+                    "{action} must be refused before approval on {distro}"
+                );
+            }
+            for distro in [
+                DistroId::Ubuntu {
+                    major: 24,
+                    minor: 4,
+                },
+                DistroId::FedoraSilverblue { version: 41 },
+            ] {
+                if action != "AptUpdate" {
+                    assert!(
+                        check_action_distro(action, Some(&distro)).is_ok(),
+                        "portable {action} must remain usable on {distro}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
