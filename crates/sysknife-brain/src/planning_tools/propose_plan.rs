@@ -8,7 +8,9 @@ use crate::action_name::ActionName;
 use crate::planner::{Plan, PlanRiskLevel, PlanStep, PlanningError};
 use crate::provider::ToolDefinition;
 use sysknife_core::action_family::{
-    DEBIAN_ONLY_ACTIONS, FEDORA_ONLY_ACTIONS, NON_CANONICAL_ON_DEBIAN,
+    action_requires_supported_host, DEBIAN_ONLY_ACTIONS, FEDORA_ONLY_ACTIONS,
+    NON_CANONICAL_ON_DEBIAN, NON_CANONICAL_ON_DEBIAN_HOST, NON_CANONICAL_ON_FEDORA,
+    UBUNTU_ONLY_ACTIONS,
 };
 use sysknife_types::{DISTRO_FAMILY_DEBIAN, DISTRO_FAMILY_FEDORA, DISTRO_FAMILY_OTHER};
 
@@ -377,7 +379,7 @@ reports live interface state"),
      "modify GRUB kernel arguments and run update-grub — params: append (list), delete (list), bare tokens only (no '='); both lists are screened for boot-security downgrades; Ubuntu only; High risk; requires reboot"),
     // ── Ubuntu / reboot ───────────────────────────────────────────────────────
     ("CheckPendingReboot",
-     "check whether a reboot is pending (/var/run/reboot-required) — no params; Ubuntu/Debian only; read-only"),
+     "check whether a reboot is pending (/var/run/reboot-required) — no params; Ubuntu only; read-only"),
     // ── Cross-distro / resolvectl (systemd-resolved) ──────────────────────────
     ("ResolvectlStatus",
      "show DNS resolution status for all network interfaces (resolvectl status) — no params; cross-distro (any systemd-resolved host); read-only"),
@@ -457,38 +459,52 @@ reports live interface state"),
      "list Multipass VMs and their state — no params; Ubuntu only; read-only"),
 ];
 
-/// Should `action` be offered to a planner running on `family`?
+/// Should `action` be offered on the detected distribution?
 ///
 /// Two different reasons to withhold one, and they must stay distinct — merging
 /// them turned a planning fix into an execution-fence regression:
 ///
 /// * the family fence in [`sysknife_core::action_family`], which says the action
 ///   *cannot* run there; and
-/// * [`NON_CANONICAL_ON_DEBIAN`], which says it can, but the family has its own
+/// * the `NON_CANONICAL_ON_*` lists, which say it can, but the family has its own
 ///   canonical tool and the planner should reach for that instead.
 ///
 /// A detected `other` family (Arch, openSUSE, anything unrecognised) is filtered
-/// against **both** fences, matching the CLI routing guard: it refuses every
-/// family-specific action on such a host, so offering them invites a plan that is
-/// certain to be rejected after a paid call.
+/// against hard fences and portable-tool preferences, matching the CLI routing
+/// guard: it refuses every distro-policy action on such a host, so offering them
+/// invites a plan that is certain to be rejected after a paid call.
 ///
 /// No hint at all still offers everything — without a detected family there is no
 /// basis to exclude anything, and a generic deployment has to be able to plan.
-fn available_on(action: &str, family: Option<&str>) -> bool {
+fn available_on(action: &str, hint: Option<&sysknife_types::DistroHint>) -> bool {
+    let family = hint.map(|hint| hint.family);
+    if let Some(hint) = hint {
+        if hint.id != "ubuntu" && UBUNTU_ONLY_ACTIONS.contains(&action) {
+            return false;
+        }
+        if hint.family == DISTRO_FAMILY_DEBIAN
+            && hint.id != "ubuntu"
+            && NON_CANONICAL_ON_DEBIAN_HOST.contains(&action)
+        {
+            return false;
+        }
+    }
     match family {
         Some(DISTRO_FAMILY_DEBIAN) => {
             !FEDORA_ONLY_ACTIONS.contains(&action) && !NON_CANONICAL_ON_DEBIAN.contains(&action)
         }
-        Some(DISTRO_FAMILY_FEDORA) => !DEBIAN_ONLY_ACTIONS.contains(&action),
-        Some(DISTRO_FAMILY_OTHER) => {
-            !FEDORA_ONLY_ACTIONS.contains(&action) && !DEBIAN_ONLY_ACTIONS.contains(&action)
+        Some(DISTRO_FAMILY_FEDORA) => {
+            !DEBIAN_ONLY_ACTIONS.contains(&action)
+                && !UBUNTU_ONLY_ACTIONS.contains(&action)
+                && !NON_CANONICAL_ON_FEDORA.contains(&action)
         }
+        Some(DISTRO_FAMILY_OTHER) => !action_requires_supported_host(action),
         _ => true,
     }
 }
 
-/// Build the `propose_plan` tool definition, offering only the actions that the
-/// detected distro family can actually run.
+/// Build the `propose_plan` tool definition from both family and distribution
+/// identity, including the planner preferences appropriate to that host.
 ///
 /// The filter is not a nicety. `prompt.rs` renders per-distro prose and a test
 /// asserts the Debian prompt names no Fedora action, but this schema used to
@@ -496,12 +512,12 @@ fn available_on(action: &str, family: Option<&str>) -> bool {
 /// `firewall-cmd` or `toolbox` action on Ubuntu having never seen it in the
 /// prompt, and did, in two live VM stories. Prose cannot fix that; only not
 /// offering the action can.
-pub fn propose_plan_tool_def(family: Option<&str>) -> ToolDefinition {
+pub fn propose_plan_tool_def(hint: Option<&sysknife_types::DistroHint>) -> ToolDefinition {
     // One filtered pass feeds both the enum and the catalogue, so the model can
     // never be told about an action the enum would reject.
     let offered: Vec<&(&str, &str)> = KNOWN_ACTIONS
         .iter()
-        .filter(|(name, _)| available_on(name, family))
+        .filter(|(name, _)| available_on(name, hint))
         .collect();
 
     let action_enum: Vec<serde_json::Value> = offered
@@ -702,6 +718,62 @@ pub fn parse_proposed_plan(intent: &str, input: &serde_json::Value) -> Result<Pl
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tool_def_for_family(family: Option<&'static str>) -> ToolDefinition {
+        let hint = family.map(|family| sysknife_types::DistroHint {
+            id: if family == DISTRO_FAMILY_DEBIAN {
+                "ubuntu"
+            } else {
+                family
+            }
+            .into(),
+            family,
+            version: None,
+        });
+        propose_plan_tool_def(hint.as_ref())
+    }
+
+    #[test]
+    fn debian_host_does_not_inherit_ubuntu_tools_or_preferences() {
+        let hint = sysknife_types::DistroHint {
+            id: "debian".into(),
+            family: DISTRO_FAMILY_DEBIAN,
+            // Deliberately misleading display text: it must not grant Ubuntu identity.
+            version: Some("Ubuntu 24.04".into()),
+        };
+        let def = propose_plan_tool_def(Some(&hint));
+        let offered = offered_actions(&def);
+        for action in UBUNTU_ONLY_ACTIONS
+            .iter()
+            .chain(NON_CANONICAL_ON_DEBIAN_HOST)
+        {
+            assert!(
+                !offered.contains(&action.to_string()),
+                "Debian must not offer {action}"
+            );
+        }
+        for action in DEBIAN_ONLY_ACTIONS {
+            assert!(
+                offered.contains(&action.to_string()),
+                "Debian-family capability lost: {action}"
+            );
+        }
+        let ubuntu = sysknife_types::DistroHint {
+            id: "ubuntu".into(),
+            ..hint
+        };
+        let ubuntu_def = propose_plan_tool_def(Some(&ubuntu));
+        let offered = offered_actions(&ubuntu_def);
+        for action in UBUNTU_ONLY_ACTIONS
+            .iter()
+            .chain(NON_CANONICAL_ON_DEBIAN_HOST)
+        {
+            assert!(
+                offered.contains(&action.to_string()),
+                "Ubuntu capability lost: {action}"
+            );
+        }
+    }
 
     fn valid_input(risk: &str) -> serde_json::Value {
         serde_json::json!({
@@ -973,7 +1045,7 @@ mod tests {
 
     #[test]
     fn debian_tool_def_omits_fedora_only_actions() {
-        let def = propose_plan_tool_def(Some(DISTRO_FAMILY_DEBIAN));
+        let def = tool_def_for_family(Some(DISTRO_FAMILY_DEBIAN));
         let offered = offered_actions(&def);
         let catalogue = def.input_schema["properties"]["steps"]["items"]["properties"]
             ["action_name"]["description"]
@@ -1006,9 +1078,13 @@ mod tests {
 
     #[test]
     fn fedora_tool_def_omits_debian_only_actions() {
-        let def = propose_plan_tool_def(Some(DISTRO_FAMILY_FEDORA));
+        let def = tool_def_for_family(Some(DISTRO_FAMILY_FEDORA));
         let offered = offered_actions(&def);
-        for name in DEBIAN_ONLY_ACTIONS {
+        for name in DEBIAN_ONLY_ACTIONS
+            .iter()
+            .chain(UBUNTU_ONLY_ACTIONS)
+            .chain(NON_CANONICAL_ON_FEDORA)
+        {
             assert!(
                 !offered.contains(&name.to_string()),
                 "Fedora tool def offered Debian-only action {name}"
@@ -1028,7 +1104,7 @@ mod tests {
         // daemon must still be able to run them there — an Ubuntu host that
         // installed firewalld has not lost firewall management, and `UfwStatus`
         // reporting "inactive" on such a host would be a confident wrong answer.
-        let offered = offered_actions(&propose_plan_tool_def(Some(DISTRO_FAMILY_DEBIAN)));
+        let offered = offered_actions(&tool_def_for_family(Some(DISTRO_FAMILY_DEBIAN)));
         for name in NON_CANONICAL_ON_DEBIAN {
             assert!(
                 !offered.contains(&name.to_string()),
@@ -1041,7 +1117,7 @@ mod tests {
             );
         }
         // Still offered where they are canonical.
-        let fedora = offered_actions(&propose_plan_tool_def(Some(DISTRO_FAMILY_FEDORA)));
+        let fedora = offered_actions(&tool_def_for_family(Some(DISTRO_FAMILY_FEDORA)));
         for name in NON_CANONICAL_ON_DEBIAN {
             assert!(
                 fedora.contains(&name.to_string()),
@@ -1055,8 +1131,37 @@ mod tests {
         // The CLI routing guard refuses every family-specific action on a host
         // that is neither Debian nor Fedora, so offering them here would spend a
         // paid call on a plan certain to be rejected.
-        let offered = offered_actions(&propose_plan_tool_def(Some(DISTRO_FAMILY_OTHER)));
-        for name in FEDORA_ONLY_ACTIONS.iter().chain(DEBIAN_ONLY_ACTIONS.iter()) {
+        let def = tool_def_for_family(Some(DISTRO_FAMILY_OTHER));
+        let offered = offered_actions(&def);
+        // Literal portable cases keep this regression visible even if a list
+        // is narrowed again. Check the description as well as the enum.
+        let catalogue = def.input_schema["properties"]["steps"]["items"]["properties"]
+            ["action_name"]["description"]
+            .as_str()
+            .unwrap();
+        for name in [
+            "SnapInstall",
+            "UfwEnable",
+            "AppArmorEnforce",
+            "ConfigureFirewall",
+            "CreateToolbox",
+        ] {
+            assert!(!offered.contains(&name.to_string()), "offered {name}");
+            assert!(
+                !catalogue
+                    .lines()
+                    .any(|line| line.starts_with(&format!("{name} — "))),
+                "catalogue describes unavailable {name}"
+            );
+        }
+        for name in FEDORA_ONLY_ACTIONS
+            .iter()
+            .chain(DEBIAN_ONLY_ACTIONS)
+            .chain(UBUNTU_ONLY_ACTIONS)
+            .chain(NON_CANONICAL_ON_DEBIAN)
+            .chain(NON_CANONICAL_ON_DEBIAN_HOST)
+            .chain(NON_CANONICAL_ON_FEDORA)
+        {
             assert!(
                 !offered.contains(&name.to_string()),
                 "an unrecognised-family host was offered family-specific action {name}"
@@ -1082,7 +1187,7 @@ mod tests {
         // they are ever built from two separate passes, this catches the drift
         // where the model is told about an action it is not allowed to name.
         for family in [Some(DISTRO_FAMILY_DEBIAN), Some(DISTRO_FAMILY_FEDORA), None] {
-            let def = propose_plan_tool_def(family);
+            let def = tool_def_for_family(family);
             let catalogue = def.input_schema["properties"]["steps"]["items"]["properties"]
                 ["action_name"]["description"]
                 .as_str()

@@ -12,6 +12,21 @@ Releases before `0.2.5` predate the public launch; their notes live in the
 
 ## [Unreleased]
 
+### Changed
+
+- Separate Ubuntu identity requirements from Debian-family mechanisms and
+  planner defaults. Canonical services, PPAs and the reboot sentinel require
+  Ubuntu itself; portable tools are no longer refused merely for being another
+  distribution's default. Ubuntu and Fedora default catalogues and host
+  eligibility remain unchanged (#237).
+- Keep portable tools behind the CLI supported-host gate and out of unknown-family
+  planner catalogues. At the daemon, portable Observer reads such as `UfwStatus`
+  can now run without distro detection; mutations and hard-fenced reads still
+  require an eligible host. `AptUpdate` remains hard-fenced despite its Low risk.
+- `DistroHint` now carries a distribution `id`, and `propose_plan_tool_def`
+  accepts the full hint rather than a family string. This is a public Rust API
+  change requiring a middle-digit release while the project is in `0.y`.
+
 ### Fixed
 
 - Attach the default safety audit log in `LlmPlanner::from_config`, the
