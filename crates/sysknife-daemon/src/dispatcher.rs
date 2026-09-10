@@ -5079,7 +5079,8 @@ mod tests {
         // `AptUpdate` is RiskLevel::Low, so min_role_for_action puts it at
         // Observer — yet it runs `sudo apt-get update`. Any exemption keyed on
         // the RBAC role therefore lets a privileged mutation through, which is
-        // why the platform gate does not exempt reads at all.
+        // why the platform gate does not exempt hard-fenced reads. Portable
+        // Observer reads still return early without requiring distro detection.
         let dir = tempdir().unwrap();
         let mut state = test_state(&dir);
         state.host_distro = Some(sysknife_core::distro::DistroId::Debian { version: Some(12) });

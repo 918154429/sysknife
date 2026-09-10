@@ -479,6 +479,11 @@ reports live interface state"),
 fn available_on(action: &str, hint: Option<&sysknife_types::DistroHint>) -> bool {
     let family = hint.map(|hint| hint.family);
     if let Some(hint) = hint {
+        // Ubuntu Core is immutable and is not an eligible Debian host. Do not
+        // offer apt (or other host-policy actions) merely from its family tag.
+        if hint.id == "ubuntu-core" {
+            return !action_requires_supported_host(action);
+        }
         if hint.id != "ubuntu" && UBUNTU_ONLY_ACTIONS.contains(&action) {
             return false;
         }
@@ -735,6 +740,20 @@ mod tests {
 
     #[test]
     fn debian_host_does_not_inherit_ubuntu_tools_or_preferences() {
+        let core = sysknife_types::DistroHint {
+            id: "ubuntu-core".into(),
+            family: DISTRO_FAMILY_DEBIAN,
+            version: Some("24".into()),
+        };
+        let core_def = propose_plan_tool_def(Some(&core));
+        let core_actions = offered_actions(&core_def);
+        for action in KNOWN_ACTIONS {
+            assert_eq!(
+                core_actions.contains(&action.to_string()),
+                !action_requires_supported_host(action),
+                "Ubuntu Core: {action}"
+            );
+        }
         let hint = sysknife_types::DistroHint {
             id: "debian".into(),
             family: DISTRO_FAMILY_DEBIAN,
