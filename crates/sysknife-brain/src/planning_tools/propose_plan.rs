@@ -357,7 +357,7 @@ this is runtime status, NOT the saved configuration; on Ubuntu the saved config 
     ("UfwReset",
      "reset ufw to defaults, removing all rules — no params; Ubuntu only; High risk; irreversible"),
     ("UfwStatus",
-     "show current ufw status and rules — no params; Ubuntu only; read-only"),
+     "show current ufw status and rules — optional param: numbered (boolean, default false); true runs ufw status numbered and exposes rule_number values for UfwDeleteRule, false keeps verbose status; read-only"),
     // ── Ubuntu / distrobox — container environment ────────────────────────────
     ("DistroboxList",
      "list distrobox containers — no params; Ubuntu only; read-only"),
@@ -434,7 +434,7 @@ reports live interface state"),
      "regenerate netplan backend config without applying — no params; Ubuntu only; Medium risk; dry-run before NetplanApply"),
     // ── Ubuntu / Tier 3 — ufw extensions ─────────────────────────────────────
     ("UfwDeleteRule",
-     "delete a ufw rule by number — param: rule_number* (positive integer from 'ufw status numbered'); Ubuntu only; High risk"),
+     "delete a ufw rule by number — param: rule_number* (positive integer from query_ufw_rules or UfwStatus with numbered=true); never guess a rule number, and refresh after rule changes; High risk"),
     ("UfwLimit",
      "add rate-limiting rule on a port/service (>6 connections/30s blocked) — param: target* (e.g. '22' or 'ssh'); Ubuntu only; High risk; use for SSH brute-force mitigation"),
     // ── Ubuntu / Tier 3 — release upgrade ────────────────────────────────────

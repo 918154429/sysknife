@@ -903,7 +903,7 @@ const DEBIAN_PARAMS: &str = r#"
 **No params** — use `{}`: AptUpdate, AptAutoremove, AptListInstalled,
 AptListUpgradable, AptHistoryList, CheckPendingReboot,
 GrubGetKargs,
-UfwStatus, UfwEnable, UfwDisable, UfwReset, DistroboxList, NetplanGetConfig,
+UfwEnable, UfwDisable, UfwReset, DistroboxList, NetplanGetConfig,
 NetplanApply, NetplanGenerate,
 ProStatus, ProDetach, LivepatchStatus, MultipassList, UbuntuReleaseUpgrade.
 
@@ -928,8 +928,9 @@ ProStatus, ProDetach, LivepatchStatus, MultipassList, UbuntuReleaseUpgrade.
 - `GrubSetKargs`: `{"append":["quiet","nomodeset"],"delete":["splash"]}` — either list may be `[]` but at least one must be non-empty
 
 **UFW**:
+- `UfwStatus`: `{}` for verbose status, or `{"numbered":true}` for current rule indices. `query_ufw_rules` reads the numbered form during planning.
 - `UfwAllow` / `UfwDeny`: `{"port_or_service":"22/tcp"}` or `{"port_or_service":"ssh"}`
-- `UfwDeleteRule`: `{"rule_number":3}` — positive integer from `ufw status numbered`
+- `UfwDeleteRule`: `{"rule_number":3}` — use a rule number explicitly supplied by the operator or obtained from `query_ufw_rules`; never guess. Query again after any rule change because indices shift.
 - `UfwLimit`: `{"target":"22"}` or `{"target":"ssh"}`
 
 **Netplan**:
@@ -1507,9 +1508,12 @@ mod tests {
     /// that could only fail. The CLI now also refuses such a plan at plan time;
     /// this line is what stops the model proposing one in the first place.
     #[test]
-    fn debian_prompt_states_the_valid_port_range() {
+    fn debian_prompt_states_firewall_input_requirements() {
         let hint = debian_hint();
         let p = build_system_prompt(None, Some(&hint));
+        assert!(p.contains("query_ufw_rules"));
+        assert!(p.contains("{\"numbered\":true}"));
+        assert!(p.contains("indices shift"));
         assert!(
             p.contains("1-65535"),
             "Debian prompt must state the valid port range for ufw rules"

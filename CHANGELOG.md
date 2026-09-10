@@ -14,6 +14,10 @@ Releases before `0.2.5` predate the public launch; their notes live in the
 
 ### Changed
 
+- Let `UfwStatus` return numbered rules with `numbered: true`, retaining verbose
+  output by default. Add `query_ufw_rules` so the planner can read the indices
+  required by `UfwDeleteRule` instead of guessing them (#234).
+
 - Separate Ubuntu identity requirements from Debian-family mechanisms and
   planner defaults. Canonical services, PPAs and the reboot sentinel require
   Ubuntu itself; portable tools are no longer refused merely for being another
