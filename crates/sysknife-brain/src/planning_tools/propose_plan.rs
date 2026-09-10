@@ -747,7 +747,7 @@ mod tests {
         };
         let core_def = propose_plan_tool_def(Some(&core));
         let core_actions = offered_actions(&core_def);
-        for action in KNOWN_ACTIONS {
+        for (action, _) in KNOWN_ACTIONS {
             assert_eq!(
                 core_actions.contains(&action.to_string()),
                 !action_requires_supported_host(action),
