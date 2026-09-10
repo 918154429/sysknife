@@ -1827,8 +1827,8 @@ mod tests {
             classified, observer_actions,
             "every Observer-callable action must be explicitly classified as read-only or mutating"
         );
-        assert_eq!(observer_actions.len(), 63);
-        assert_eq!(read_only.len(), 62);
+        assert_eq!(observer_actions.len(), 65);
+        assert_eq!(read_only.len(), 64);
         assert_eq!(mutating, BTreeSet::from(["AptUpdate"]));
     }
 
