@@ -444,6 +444,8 @@ const MCP_READ_ONLY_ACTIONS: &[&str] = &[
     "GetFirewallState",
     "GetNetworkStatus",
     "GetListeningPorts",
+    "GetNftablesRuleset",
+    "GetFirewallBackendState",
     "ResolvectlStatus",
     "GetDateTime",
     "ListUsers",
