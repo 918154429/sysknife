@@ -155,7 +155,6 @@ pub fn get_listening_ports() -> ActionSpec {
     }
 }
 
-
 #[cfg(test)]
 mod firewall_tests {
     use super::*;
