@@ -5083,7 +5083,7 @@ mod tests {
         // Observer reads still return early without requiring distro detection.
         let dir = tempdir().unwrap();
         let mut state = test_state(&dir);
-        state.host_distro = Some(sysknife_core::distro::DistroId::Debian { version: Some(12) });
+        state.host_distro = Some(sysknife_core::distro::DistroId::Debian { version: Some(11) });
         assert!(
             !state.host_distro.as_ref().unwrap().is_supported(),
             "this test needs an ineligible host"
@@ -5097,6 +5097,14 @@ mod tests {
             validate_action_platform(&state, "AptUpdate").is_err(),
             "a privileged mutation must stay refused on an ineligible host"
         );
+        for version in [None, Some(11), Some(12), Some(13)] {
+            state.host_distro = Some(sysknife_core::distro::DistroId::Debian { version });
+            assert_eq!(
+                validate_action_platform(&state, "AptUpdate").is_ok(),
+                matches!(version, Some(12 | 13))
+            );
+            assert!(validate_action_platform(&state, "AddPpa").is_err());
+        }
     }
     #[test]
     fn raising_a_read_only_action_via_risk_overrides_does_not_arm_the_platform_fence() {
