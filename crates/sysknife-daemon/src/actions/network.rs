@@ -139,6 +139,23 @@ pub fn get_firewall_backend_state() -> ActionSpec {
     }
 }
 
+/// List listening TCP/UDP sockets and, where the daemon has permission, the
+/// owning process (`ss -tulpnH`). Read-only; answers "what is listening on port
+/// X?". Run without sudo (like `GetNetworkStatus`'s `ip`); the socket/port list
+/// is complete regardless of privilege, process attribution is best-effort.
+pub fn get_listening_ports() -> ActionSpec {
+    ActionSpec {
+        action_name: "GetListeningPorts",
+        // -t tcp, -u udp, -l listening only, -p show process, -n numeric
+        // (no DNS/service-name lookups), -H suppress the header row.
+        mechanism: command_mechanism("ss", ["-tulpnH"]),
+        risk_level: RiskLevel::Low,
+        reboot_required: false,
+        rollback_available: false,
+    }
+}
+
+
 #[cfg(test)]
 mod firewall_tests {
     use super::*;
@@ -168,21 +185,5 @@ mod firewall_tests {
                 }
             );
         }
-    }
-}
-
-/// List listening TCP/UDP sockets and, where the daemon has permission, the
-/// owning process (`ss -tulpnH`). Read-only; answers "what is listening on port
-/// X?". Run without sudo (like `GetNetworkStatus`'s `ip`); the socket/port list
-/// is complete regardless of privilege, process attribution is best-effort.
-pub fn get_listening_ports() -> ActionSpec {
-    ActionSpec {
-        action_name: "GetListeningPorts",
-        // -t tcp, -u udp, -l listening only, -p show process, -n numeric
-        // (no DNS/service-name lookups), -H suppress the header row.
-        mechanism: command_mechanism("ss", ["-tulpnH"]),
-        risk_level: RiskLevel::Low,
-        reboot_required: false,
-        rollback_available: false,
     }
 }
