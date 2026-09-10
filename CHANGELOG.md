@@ -14,6 +14,9 @@ Releases before `0.2.5` predate the public launch; their notes live in the
 
 ### Changed
 
+- Make Debian stable releases 12 and later eligible, while refusing an unknown
+  version and releases below the security-support floor. Debian eligibility is
+  separate from live-VM validation; Ubuntu-only actions remain excluded (#238).
 - Separate Ubuntu identity requirements from Debian-family mechanisms and
   planner defaults. Canonical services, PPAs and the reboot sentinel require
   Ubuntu itself; portable tools are no longer refused merely for being another
